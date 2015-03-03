@@ -32,39 +32,15 @@
             android:layout_alignParentTop="true"
             android:layout_centerHorizontal="true">
 
-            <RelativeLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:id="@+id/relativeLayout2"
-                android:layout_centerVertical="true"
-                android:layout_centerHorizontal="true"
-                android:layout_alignParentEnd="false"
-                android:layout_alignParentStart="false"
-                android:layout_alignParentTop="false"
-                android:layout_alignParentLeft="false"
-                android:layout_alignParentBottom="false"
-                android:layout_alignParentRight="false">
-
-            </RelativeLayout>
-
-            <Chronometer
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:id="@+id/chronometer"
-                android:textSize="20dp"
-                android:layout_alignTop="@+id/textView"
-                android:layout_toEndOf="@+id/textView" />
-
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Next Mark in : "
-                android:id="@+id/textView"
+                android:id="@+id/mCountDownTimerView"
                 android:textColor="#ff000000"
                 android:textSize="20dp"
                 android:layout_centerVertical="true"
-                android:layout_alignParentStart="true"
-                android:layout_marginStart="90dp" />
+                android:layout_centerHorizontal="true" />
 
         </RelativeLayout>
 

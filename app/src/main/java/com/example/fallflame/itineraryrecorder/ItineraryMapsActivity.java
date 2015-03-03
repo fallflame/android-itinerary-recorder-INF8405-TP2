@@ -7,12 +7,15 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.BatteryManager;
+import android.os.CountDownTimer;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.widget.Chronometer;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -31,24 +34,27 @@ public class ItineraryMapsActivity extends FragmentActivity {
     private static final int MEDIA_TYPE_IMAGE = 1;
     private static final int CAPTURE_IMAGE_ACTIVITY_REQUEST_CODE = 100;
 
+    // Default values
+    final private double DEFAULT_lNG = -73.597929;
+    final private double DEFAULT_LAT = 45.508536;
+    final private int DEFAULT_ZOOM_LEVEL = 12;
+    final private int DEFAULT_MARK_INTERVAL = 60;
+
     private GoogleMap mMap; // Might be null if Google Play services APK is not available.
 
     private String mode = "Cellular"; //"GPS" or "Cellular"
     private Location currentLocation;
     private ArrayList<ItineraryMark> itineraryMarks = new ArrayList<>();
     private ArrayList<BaseStationMark> baseStationMarks = new ArrayList<>();
-
-    // Default values
-    final private double DEFAULT_lNG = -73.597929;
-    final private double DEFAULT_LAT = 45.508536;
-    final private int DEFAULT_ZOOM_LEVEL = 12;
-
+    private int markInterval = DEFAULT_MARK_INTERVAL;
+    private CountDownTimer countDownTimer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_itinerary_maps);
         setUpMapIfNeeded();
+        resetCountDownTimer();
         //registerLocationListener();
     }
 
@@ -126,6 +132,7 @@ public class ItineraryMapsActivity extends FragmentActivity {
         itineraryMarks.add(mark);
 
         takePhoto();
+        resetCountDownTimer();
     }
 
     public void makeMark(View view) {
@@ -213,4 +220,22 @@ public class ItineraryMapsActivity extends FragmentActivity {
         return mediaFile;
     }
 
+    private void resetCountDownTimer(){
+
+        countDownTimer = new CountDownTimer(markInterval * 1000, 1000) {
+            @Override
+            public void onTick(long millisUntilFinished) {
+                TextView mCountDownTimerView = (TextView)findViewById(R.id.mCountDownTimerView);
+                int minute = (int) millisUntilFinished / 1000 / 60;
+                int second = (int) millisUntilFinished / 1000 % 60;
+
+                mCountDownTimerView.setText("Next Mark in: " + minute + " minutes " + second + " seconds.");
+            }
+
+            @Override
+            public void onFinish() {
+                makeMark();
+            }
+        }.start();
+    }
 }
