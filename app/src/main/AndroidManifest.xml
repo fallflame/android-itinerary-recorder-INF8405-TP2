@@ -31,7 +31,7 @@
             android:value="@string/google_maps_key" />
 
         <activity
-            android:name=".ItineraryMapsActivity"
+            android:name=".ItineraryRecordingActivity"
             android:label="@string/title_activity_itinerary_maps" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

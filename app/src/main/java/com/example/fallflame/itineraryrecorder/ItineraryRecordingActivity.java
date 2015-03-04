@@ -1,9 +1,13 @@
 package com.example.fallflame.itineraryrecorder;
 
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.graphics.Bitmap;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -16,7 +20,8 @@ import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
-import android.widget.Chronometer;
+import android.widget.ImageView;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -29,12 +34,15 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 
-public class ItineraryMapsActivity extends FragmentActivity {
+public class ItineraryRecordingActivity extends FragmentActivity {
 
     // some constant use by android system
     private static final int MEDIA_TYPE_IMAGE = 1;
@@ -63,10 +71,12 @@ public class ItineraryMapsActivity extends FragmentActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_itinerary_maps);
+        setContentView(R.layout.activity_itinerary_recording);
         setUpMapIfNeeded();
+
         resetCountDownTimer();
         registerLocationListener();
+
     }
 
     @Override
@@ -75,21 +85,6 @@ public class ItineraryMapsActivity extends FragmentActivity {
         setUpMapIfNeeded();
     }
 
-    /**
-     * Sets up the map if it is possible to do so (i.e., the Google Play services APK is correctly
-     * installed) and the map has not already been instantiated.. This will ensure that we only ever
-     * call {@link #setUpMap()} once when {@link #mMap} is not null.
-     * <p/>
-     * If it isn't installed {@link SupportMapFragment} (and
-     * {@link com.google.android.gms.maps.MapView MapView}) will show a prompt for the user to
-     * install/update the Google Play services APK on their device.
-     * <p/>
-     * A user can return to this FragmentActivity after following the prompt and correctly
-     * installing/updating/enabling the Google Play services. Since the FragmentActivity may not
-     * have been completely destroyed during this process (it is likely that it would only be
-     * stopped or paused), {@link #onCreate(Bundle)} may not be called again so we should call this
-     * method in {@link #onResume()} to guarantee that it will be called.
-     */
     private void setUpMapIfNeeded() {
         // Do a null check to confirm that we have not already instantiated the map.
         if (mMap == null) {
@@ -103,12 +98,6 @@ public class ItineraryMapsActivity extends FragmentActivity {
         }
     }
 
-    /**
-     * This is where we can add markers or lines, add listeners or move the camera. In this case, we
-     * just add a marker near Africa.
-     * <p/>
-     * This should only be called once and when we are sure that {@link #mMap} is not null.
-     */
     private void setUpMap() {
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(DEFAULT_LAT, DEFAULT_lNG), DEFAULT_ZOOM_LEVEL));
         mMap.setMyLocationEnabled(true);
@@ -121,31 +110,30 @@ public class ItineraryMapsActivity extends FragmentActivity {
             @Override
             public View getInfoContents(Marker marker) {
 
-                // Getting view from the layout file info_window_layout
+                ItineraryMark mark = itineraryMarks.get(Integer.parseInt(marker.getTitle()));
+
                 View v = getLayoutInflater().inflate(R.layout.info_window_layout, null);
 
-                // Getting the position from the marker
-                LatLng latLng = marker.getPosition();
 
-                // Getting reference to the TextView to set latitude
-                TextView tvLat = (TextView) v.findViewById(R.id.tv_lat);
+                TextView tvTitle = (TextView) v.findViewById(R.id.tv_title);
+                TextView tvLng = (TextView) v.findViewById(R.id.tv_info);
+                ImageView photoView = (ImageView) v.findViewById(R.id.photoView);
 
-                // Getting reference to the TextView to set longitude
-                TextView tvLng = (TextView) v.findViewById(R.id.tv_lng);
 
-                // Setting the latitude
-                tvLat.setText("Latitude:" + latLng.latitude);
+                try {
+                    Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), Uri.parse(mark.getImageURI()));
+                    photoView.setImageBitmap(bitmap);
+                } catch (IOException | NullPointerException e) {
+                    // photo not exist
+                }
 
-                // Setting the longitude
-                tvLng.setText("Longitude:"+ latLng.longitude);
+                tvTitle.setText("Marker No.: " + marker.getTitle());
+                tvLng.setText(mark.getInfoString());
 
-                // Returning the view containing InfoWindow contents
                 return v;
-                            }
+            }
         });
     }
-
-
 
     public void makeMark(){
 
@@ -183,8 +171,8 @@ public class ItineraryMapsActivity extends FragmentActivity {
     private void addMarkerToMap(ItineraryMark mark){
         if (mMap != null){
             mMap.addMarker(new MarkerOptions()
-                                .position(new LatLng(mark.getPosition()[0], mark.getPosition()[1]))
-                                .title("I-" + itineraryMarks.size()));
+                    .position(new LatLng(mark.getPosition()[0], mark.getPosition()[1]))
+                    .title(itineraryMarks.size() - 1 + ""));
             if(itineraryMarks.size() >=2) {
                 ItineraryMark p1 = itineraryMarks.get(itineraryMarks.size()-2);
                 ItineraryMark p2 = itineraryMarks.get(itineraryMarks.size()-1);
@@ -326,5 +314,30 @@ public class ItineraryMapsActivity extends FragmentActivity {
                 makeMark();
             }
         }.start();
+    }
+
+    public void finishRecorder(View view){
+        try {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            ObjectOutputStream oos = new ObjectOutputStream(bos);
+            oos.writeObject(itineraryMarks);
+            oos.flush();
+            oos.close();
+            bos.close();
+
+            byte[] data = bos.toByteArray();
+
+            SQLiteDatabase db = openOrCreateDatabase("itinerary.db", Context.MODE_PRIVATE, null);
+
+            db.execSQL("CREATE TABLE IF NOT EXISTS itineraries (_id INTEGER PRIMARY KEY AUTOINCREMENT, itineraryDate INTEGER, itineraryMarks BLOB)");
+            db.execSQL("INSERT INTO itineraries VALUES (NULL, ?, ?)", new Object[]{System.currentTimeMillis(), data});
+
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        Intent intent = new Intent(this, ItineraryRecordedActivity.class);
+        startActivity(intent);
     }
 }

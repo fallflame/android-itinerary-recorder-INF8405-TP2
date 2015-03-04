@@ -1,9 +1,11 @@
 package com.example.fallflame.itineraryrecorder;
 
+import java.io.Serializable;
+
 /**
  * Created by FallFlame on 15/3/2.
  */
-public class ItineraryMark {
+public class ItineraryMark implements Serializable{
     private ItineraryMark previousMark;
     private String mode;
     private double[] position; //double[3] lat, lng, alt
@@ -21,7 +23,7 @@ public class ItineraryMark {
         if (previousMark == null)
             return "";
 
-        double bearing = bearing(position[0], position[1], previousMark.getPosition()[0], previousMark.getPosition()[1]);
+        double bearing = bearing(previousMark.getPosition()[0], previousMark.getPosition()[1], position[0], position[1]);
 
         String ret = "error";
 
@@ -73,7 +75,7 @@ public class ItineraryMark {
         if (previousMark == null)
             return 0;
 
-        return this.getDistanceFromPreviousMark() / (this.currentTime - this.previousMark.getCurrentTime()) / 1000;
+        return this.getDistanceFromPreviousMark() / (this.currentTime - this.previousMark.getCurrentTime()) * 1000;
     }
 
     /**
@@ -110,6 +112,19 @@ public class ItineraryMark {
         return (Math.toDegrees(Math.atan2(y, x))+360)%360;
     }
 
+    public String getInfoString(){
+
+        String ret =  "Mode: " + mode + "\n"
+                    + "Date: " + currentTime + "\n"
+                    + "Lat: " + position[0] + "\n"
+                    + "Lng: " + position[1] + "\n"
+                    + "Battery: " + batteryLevel + "\n"
+                    + "Direction: " + getDirection() + "\n"
+                    + "Distance(relative): " + getDistanceFromPreviousMark() + "\n"
+                    + "Speed: " + getSpeed() + "\n";
+
+        return ret;
+    }
 
     /******************* Setter and Getter *******************/
 
