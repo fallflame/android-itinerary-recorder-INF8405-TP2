@@ -3,5 +3,5 @@
 
     <string name="app_name">ItineraryRecorder</string>
     <string name="title_activity_itinerary_maps">Itinerary</string>
-
+    <color name="bg_color">#ffffff</color>
 </resources>
