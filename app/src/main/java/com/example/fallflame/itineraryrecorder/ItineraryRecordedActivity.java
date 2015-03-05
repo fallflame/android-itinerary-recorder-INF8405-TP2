@@ -21,6 +21,7 @@ import android.support.v4.app.FragmentActivity;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -65,6 +66,7 @@ public class ItineraryRecordedActivity extends FragmentActivity {
         setContentView(R.layout.activity_itinerary_recorded);
 
         loadItinerary();
+        setItineraryInfo();
 
         setUpMapIfNeeded();
 
@@ -84,6 +86,33 @@ public class ItineraryRecordedActivity extends FragmentActivity {
             } catch (IOException | ClassNotFoundException e) {
                 e.printStackTrace();
             }
+        }
+    }
+
+    private void setItineraryInfo(){
+        LinearLayout linearLayout = (LinearLayout)findViewById(R.id.itineraryInfo);
+
+        ArrayList<String> infos = new ArrayList<>();
+        ItineraryMark firstMark = itineraryMarks.get(0);
+        ItineraryMark lastMark = itineraryMarks.get(itineraryMarks.size()-1);
+
+        infos.add("Mode: " + firstMark.getMode());
+        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        infos.add("Started Time: " + df.format(itineraryMarks.get(0).getCurrentTime()));
+        int durationInSecond = (int)(lastMark.getCurrentTime() - firstMark.getCurrentTime()) / 1000;
+        infos.add("Duration: " + (int)durationInSecond / 60 + "minutes, " + durationInSecond % 60 + "seconds.");
+        double totalDistance = 0;
+        for(ItineraryMark m : itineraryMarks){
+            totalDistance += m.getDistanceFromPreviousMark();
+        }
+        infos.add("Total Distance: " + totalDistance + "meters.");
+        infos.add("Battery Consumed: " + (int) (firstMark.getBatteryLevel() - lastMark.getBatteryLevel()) * 100 + "%.");
+
+        for(String info : infos){
+            TextView textView = new TextView(getBaseContext());
+            textView.setTextColor(0xFF000000);
+            textView.setText(info);
+            linearLayout.addView(textView);
         }
     }
 
@@ -153,10 +182,13 @@ public class ItineraryRecordedActivity extends FragmentActivity {
         if (mMap != null){
             mMap.addMarker(new MarkerOptions()
                     .position(new LatLng(mark.getPosition()[0], mark.getPosition()[1]))
-                    .title(itineraryMarks.size() - 1 + ""));
-            if(itineraryMarks.size() >=2) {
-                ItineraryMark p1 = itineraryMarks.get(itineraryMarks.size()-2);
-                ItineraryMark p2 = itineraryMarks.get(itineraryMarks.size()-1);
+                    .title(itineraryMarks.indexOf(mark) + ""));
+            if(itineraryMarks.size() >=2 && itineraryMarks.indexOf(mark) != 0) {
+
+                ItineraryMark previousMark = itineraryMarks.get(itineraryMarks.indexOf(mark) - 1);
+
+                ItineraryMark p1 = previousMark;
+                ItineraryMark p2 = mark;
                 double lat1 = p1.getPosition()[0];
                 double lng1 = p1.getPosition()[1];
                 double lat2 = p2.getPosition()[0];

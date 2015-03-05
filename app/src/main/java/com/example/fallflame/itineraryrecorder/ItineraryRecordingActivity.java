@@ -1,6 +1,7 @@
 package com.example.fallflame.itineraryrecorder;
 
 import android.app.AlertDialog;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -12,12 +13,24 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.Uri;
+import android.net.wifi.ScanResult;
+import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
 import android.os.CountDownTimer;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
+import android.telephony.CellIdentityCdma;
+import android.telephony.CellInfo;
+import android.telephony.CellInfoCdma;
+import android.telephony.CellInfoGsm;
+import android.telephony.CellInfoLte;
+import android.telephony.CellInfoWcdma;
+import android.telephony.CellLocation;
+import android.telephony.TelephonyManager;
+import android.telephony.cdma.CdmaCellLocation;
+import android.telephony.gsm.GsmCellLocation;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
@@ -34,13 +47,25 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.ObjectOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 public class ItineraryRecordingActivity extends FragmentActivity {
 
@@ -148,9 +173,10 @@ public class ItineraryRecordingActivity extends FragmentActivity {
         } else {
 
             ItineraryMark mark = new ItineraryMark();
+
             mark.setPosition(currentLocation.getLatitude(),
-                             currentLocation.getLongitude(),
-                             currentLocation.getAltitude());
+                    currentLocation.getLongitude(),
+                    currentLocation.getAltitude());
             mark.setBatteryLevel(getCurrentBatteryPercentage());
             mark.setMode(mode);
             if(!itineraryMarks.isEmpty())
@@ -158,10 +184,221 @@ public class ItineraryRecordingActivity extends FragmentActivity {
             itineraryMarks.add(mark);
             takePhoto(); // take photo will always add the Uri to the last element in itineraryMarks array.
             addMarkerToMap(mark); // add a marker
+            if (mode == "GPS")
+                addWifiInfo(itineraryMarks.indexOf(mark));
 
+            if (mode == "Cellular")
+                addBaseStationInfo();
         }
 
         resetCountDownTimer();
+    }
+
+    private void addBaseStationInfo(){
+        //BaseStationMark bsm = new BaseStationMark();
+        TelephonyManager mTelephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+
+        for (CellInfo cellInfo : mTelephonyManager.getAllCellInfo()) {
+            BaseStationMark bsm = new BaseStationMark();
+            bsm.setMcc(mTelephonyManager.getNetworkOperator().substring(0, 3));
+            bsm.setMnc(mTelephonyManager.getNetworkOperator().substring(3,5));
+            bsm.setMnc_name(mTelephonyManager.getNetworkOperatorName());
+            switch (mTelephonyManager.getNetworkType()){
+                case 7:
+                    bsm.setType_r("1xRTT");
+                    break;
+                case 4:
+                    bsm.setType_r("CDMA");
+                    break;
+                case 2:
+                    bsm.setType_r("EDGE");
+                    break;
+                case 14:
+                    bsm.setType_r("eHRPD");
+                    break;
+                case 5:
+                    bsm.setType_r("EVDO rev. 0");
+                    break;
+                case 6:
+                    bsm.setType_r("EVDO rev. A");
+                    break;
+                case 12:
+                    bsm.setType_r("EVDO rev. B");
+                    break;
+                case 1:
+                    bsm.setType_r("GPRS");
+                    break;
+                case 8:
+                    bsm.setType_r("HSDPA");
+                    break;
+                case 10:
+                    bsm.setType_r("HSPA");
+                    break;
+                case 15:
+                    bsm.setType_r("HSPA+");
+                    break;
+                case 9:
+                    bsm.setType_r("HSUPA");
+                    break;
+                case 11:
+                    bsm.setType_r("iDen");
+                    break;
+                case 13:
+                    bsm.setType_r("LTE");
+                    break;
+                case 3:
+                    bsm.setType_r("UMTS");
+                    break;
+                case 0:
+                    bsm.setType_r("Unknown");
+                    break;
+            }
+
+            // cell_id, lac, lat, lng, niv_sig_sb
+            if (cellInfo instanceof CellInfoCdma){
+                CellInfoCdma cellInfoCdma = (CellInfoCdma) cellInfo;
+                bsm.setNiv_sig_sb(cellInfoCdma.getCellSignalStrength().getDbm() + "dbm");
+                bsm.setCell_id(cellInfoCdma.getCellIdentity().getBasestationId());
+                bsm.setLac(cellInfoCdma.getCellIdentity().getNetworkId());
+                if (cellInfoCdma.getCellIdentity().getLatitude() != Integer.MAX_VALUE) //means no value
+                    bsm.setLat_sb(cellInfoCdma.getCellIdentity().getLatitude()/14400); // It is represented in units of 0.25 seconds
+                if (cellInfoCdma.getCellIdentity().getLongitude() != Integer.MAX_VALUE) //means no value
+                    bsm.setLong_sb(cellInfoCdma.getCellIdentity().getLongitude() / 14400); // It is represented in units of 0.25 seconds
+
+            } else if (cellInfo instanceof CellInfoGsm){
+                CellInfoGsm cellInfoGsm = (CellInfoGsm) cellInfo;
+                bsm.setNiv_sig_sb(cellInfoGsm.getCellSignalStrength().getDbm() + "dbm");
+                bsm.setCell_id(cellInfoGsm.getCellIdentity().getCid());
+                bsm.setLac(cellInfoGsm.getCellIdentity().getLac());
+
+            } else if (cellInfo instanceof CellInfoLte){
+                CellInfoLte cellInfoLte = (CellInfoLte) cellInfo;
+                bsm.setNiv_sig_sb(cellInfoLte.getCellSignalStrength().getDbm() + "dbm");
+                bsm.setCell_id(cellInfoLte.getCellIdentity().getCi());
+                // LTE cannot get a location
+
+            } else if (cellInfo instanceof CellInfoWcdma){
+                CellInfoWcdma cellInfoWcdma = (CellInfoWcdma) cellInfo;
+                bsm.setNiv_sig_sb(cellInfoWcdma.getCellSignalStrength().getDbm() + "dbm");
+                bsm.setLac(cellInfoWcdma.getCellIdentity().getLac());
+                bsm.setCell_id(cellInfoWcdma.getCellIdentity().getCid());
+            }
+
+            for (BaseStationMark b : baseStationMarks){
+                if (b.getCell_id() == bsm.getCell_id())
+                    return; // base station already added
+            }
+
+            if ( cellInfo instanceof CellInfoGsm || cellInfo instanceof  CellInfoWcdma &&
+                   bsm.getCell_id() != 0 && bsm.getCell_id() != -1 && bsm.getCell_id() != Integer.MAX_VALUE
+                && bsm.getLac() !=0 && bsm.getLac()!=-1 && bsm.getCell_id() != Integer.MAX_VALUE    ){
+
+                double[] latlng = getBaseStation(bsm.getCell_id(),
+                                                 bsm.getLac(),
+                                                 Integer.valueOf(bsm.getMcc()),
+                                                 Integer.valueOf(bsm.getMnc()));
+                bsm.setLat_sb(latlng[0]);
+                bsm.setLong_sb(latlng[1]);
+            }
+
+            baseStationMarks.add(bsm);
+
+        }
+    }
+
+    public double[] getBaseStation(int cid, int lac, int mcc, int mnc) {
+        double[] latlng = new double[]{0.0, 0.0};
+
+        try {
+
+            JSONObject holder = new JSONObject();
+
+            JSONArray array = new JSONArray();
+            JSONObject data = new JSONObject();
+            data.put("cell_id", cid);
+            data.put("locationAreaCode", lac);
+            data.put("mobileCountryCode", mcc);
+            data.put("mobileNetworkCode", mnc);
+            array.put(data);
+            holder.put("cell_towers", array);
+
+            DefaultHttpClient client = new DefaultHttpClient();
+
+            HttpPost post = new HttpPost("https://www.googleapis.com/geolocation/v1/geolocate?key=API_KEY");
+
+            StringEntity se = new StringEntity(holder.toString());
+
+            post.setEntity(se);
+            HttpResponse resp = client.execute(post);
+
+            HttpEntity entity = resp.getEntity();
+
+            BufferedReader br = new BufferedReader(new InputStreamReader(entity.getContent()));
+            StringBuffer sb = new StringBuffer();
+            String result = br.readLine();
+
+            Log.e("GetBaseStation", result);
+
+            while (result != null) {
+
+                sb.append(result);
+                result = br.readLine();
+            }
+            JSONObject jsonObject = new JSONObject(sb.toString());
+
+            JSONObject jsonObject1 = new JSONObject(jsonObject.getString("location"));
+
+            latlng[0] = Double.parseDouble(jsonObject1.getString("lat"));
+            latlng[1] = Double.parseDouble(jsonObject1.getString("lng"));
+
+        } catch (Exception e) {
+        }
+
+        return latlng;
+    }
+
+
+
+    private void addWifiInfo(final int markIndex){
+        final WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+
+        if(!wifiManager.isWifiEnabled())
+            wifiManager.setWifiEnabled(true);
+
+        //register to receive the call back when wifi scan results are ready
+        IntentFilter i = new IntentFilter();
+        i.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
+        registerReceiver(new BroadcastReceiver(){
+            public void onReceive(Context c, Intent i){
+                List<ScanResult> scanResultList = wifiManager.getScanResults(); // Returns a <list> of scanResults
+                if (scanResultList.size() != 0) {
+                    int highestLevelIndex = 0;
+                    int highestLevel = 0;
+                    for (ScanResult scanResult : scanResultList) {
+                        if (scanResult.level > highestLevel) {
+                            highestLevelIndex = scanResultList.indexOf(scanResult);
+                        }
+                    }
+
+                    ScanResult hr = scanResultList.get(highestLevelIndex);
+                    String wifiInfo = "PA_Wifi(" + hr.SSID + ", " + hr.level + "dBm, " + hr.BSSID +")";
+
+                    itineraryMarks.get(markIndex).setWifiInfo(wifiInfo);
+
+                    new AlertDialog.Builder(getApplicationContext()).setTitle("Wifi points found.")
+                            .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int which) {
+                                }
+                            })
+                            .show();
+                }
+
+
+            }
+        }, i );
+
+        wifiManager.startScan();
     }
 
     public void makeMark(View view) {
@@ -317,24 +554,27 @@ public class ItineraryRecordingActivity extends FragmentActivity {
     }
 
     public void finishRecorder(View view){
-        try {
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            ObjectOutputStream oos = new ObjectOutputStream(bos);
-            oos.writeObject(itineraryMarks);
-            oos.flush();
-            oos.close();
-            bos.close();
 
-            byte[] data = bos.toByteArray();
+        if(itineraryMarks.size() != 0) {
+            try {
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                ObjectOutputStream oos = new ObjectOutputStream(bos);
+                oos.writeObject(itineraryMarks);
+                oos.flush();
+                oos.close();
+                bos.close();
 
-            SQLiteDatabase db = openOrCreateDatabase("itinerary.db", Context.MODE_PRIVATE, null);
+                byte[] data = bos.toByteArray();
 
-            db.execSQL("CREATE TABLE IF NOT EXISTS itineraries (_id INTEGER PRIMARY KEY AUTOINCREMENT, itineraryDate INTEGER, itineraryMarks BLOB)");
-            db.execSQL("INSERT INTO itineraries VALUES (NULL, ?, ?)", new Object[]{System.currentTimeMillis(), data});
+                SQLiteDatabase db = openOrCreateDatabase("itinerary.db", Context.MODE_PRIVATE, null);
+
+                db.execSQL("CREATE TABLE IF NOT EXISTS itineraries (_id INTEGER PRIMARY KEY AUTOINCREMENT, itineraryDate INTEGER, itineraryMarks BLOB)");
+                db.execSQL("INSERT INTO itineraries VALUES (NULL, ?, ?)", new Object[]{System.currentTimeMillis(), data});
 
 
-        } catch (IOException e) {
-            e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
 
         Intent intent = new Intent(this, ItineraryRecordedActivity.class);

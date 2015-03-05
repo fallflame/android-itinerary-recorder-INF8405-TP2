@@ -12,6 +12,7 @@ public class ItineraryMark implements Serializable{
     private long currentTime;
     private String imageURI;
     private double batteryLevel;
+    private String wifiInfo;
 
 
     public ItineraryMark(){
@@ -121,7 +122,8 @@ public class ItineraryMark implements Serializable{
                     + "Battery: " + batteryLevel + "\n"
                     + "Direction: " + getDirection() + "\n"
                     + "Distance(relative): " + getDistanceFromPreviousMark() + "\n"
-                    + "Speed: " + getSpeed() + "\n";
+                    + "Speed: " + getSpeed() + "\n"
+                    + "Wifi: " + getWifiInfo();
 
         return ret;
     }
@@ -167,6 +169,14 @@ public class ItineraryMark implements Serializable{
 
     public long getCurrentTime() {
         return currentTime;
+    }
+
+    public void setWifiInfo(String wifiInfo) {
+        this.wifiInfo = wifiInfo;
+    }
+
+    public String getWifiInfo() {
+        return wifiInfo;
     }
 }
 
