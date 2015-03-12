@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="com.google.android.providers.gsf.permission.READ_GSERVICES" />
+
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
     <!--
  The ACCESS_COARSE/FINE_LOCATION permissions are not required to use
          Google Maps Android API v2, but are recommended.
@@ -15,10 +18,11 @@
 
     <!-- camera -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
-    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
+    <uses-feature android:name="android.hardware.camera" />
+
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
 
     <application
         android:allowBackup="true"
@@ -35,17 +39,27 @@
         <activity
             android:name=".ItineraryRecordingActivity"
             android:label="@string/title_activity_itinerary_maps" >
+        </activity>
+        <activity
+            android:name=".ItineraryReviewActivity"
+            android:label="ItineraryRecordedActivity" />
+        <activity
+            android:name=".ItineraryConfigurationActivity"
+            android:label="@string/title_activity_configuration" >
+        </activity>
+        <activity
+            android:name=".HistoriesActivity"
+            android:label="@string/title_activity_history" >
+        </activity>
+        <activity
+            android:name=".EntryActivity"
+            android:label="@string/title_activity_entry" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".ItineraryRecordedActivity"
-            android:label="ItineraryRecordedActivity" />
-
     </application>
 
 </manifest>

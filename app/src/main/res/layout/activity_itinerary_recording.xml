@@ -52,23 +52,24 @@
                 android:autoText="false"
                 android:textColor="#ff2ab1ff"
                 android:textSize="20dp"
+                android:clickable="true"
+                android:onClick="makeMark"
                 android:layout_alignParentTop="true"
-                android:layout_alignParentStart="true"
-                android:layout_marginStart="20dp"
-                android:onClick="makeMark"/>
+                android:layout_alignParentLeft="true"
+                android:layout_alignParentStart="true" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Finish Recorder"
                 android:id="@+id/finishRecorderButton"
-                android:layout_centerVertical="true"
-                android:layout_alignParentEnd="true"
-                android:layout_marginEnd="20dp"
-                android:layout_alignParentTop="true"
                 android:textColor="#ff2ab1ff"
                 android:textSize="20dp"
-                android:onClick="finishRecorder"/>
+                android:clickable="true"
+                android:onClick="finishRecorder"
+                android:layout_alignParentTop="true"
+                android:layout_alignParentRight="true"
+                android:layout_alignParentEnd="true" />
         </RelativeLayout>
 
     </RelativeLayout>

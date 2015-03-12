@@ -1,29 +1,18 @@
 package com.example.fallflame.itineraryrecorder;
 
-import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Bitmap;
-import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
-import android.net.Uri;
-import android.os.BatteryManager;
+import android.graphics.BitmapFactory;
 import android.os.Bundle;
-import android.os.CountDownTimer;
-import android.os.Environment;
-import android.provider.MediaStore;
 import android.support.v4.app.FragmentActivity;
-import android.util.Log;
+import android.view.KeyEvent;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -35,35 +24,28 @@ import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 
-public class ItineraryRecordedActivity extends FragmentActivity {
-
-    // some constant use by android system
-    private static final int MEDIA_TYPE_IMAGE = 1;
-    private static final int CAPTURE_IMAGE_ACTIVITY_REQUEST_CODE = 100;
+public class ItineraryReviewActivity extends FragmentActivity {
 
     // Default values, for test
-    final static private int DEFAULT_NO_ITINERARY = 1;
+    //final static private int DEFAULT_NO_ITINERARY = 1;
     final static private int DEFAULT_ZOOM_LEVEL = 12;
+    private long id; //id of the record
 
     private GoogleMap mMap; // Might be null if Google Play services APK is not available.
 
-    private ArrayList<ItineraryMark> itineraryMarks = new ArrayList<>();
-    private ArrayList<BaseStationMark> baseStationMarks = new ArrayList<>();
-
+    private ArrayList<ItineraryPointMark> itineraryPointMarks = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_itinerary_recorded);
+
+        id = getIntent().getLongExtra("recordId", -1);
 
         loadItinerary();
         setItineraryInfo();
@@ -74,7 +56,7 @@ public class ItineraryRecordedActivity extends FragmentActivity {
 
     private void loadItinerary(){
         SQLiteDatabase db = openOrCreateDatabase("itinerary.db", Context.MODE_PRIVATE, null);
-        Cursor c = db.rawQuery("SELECT itineraryDate, itineraryMarks FROM itineraries WHERE _id = " + DEFAULT_NO_ITINERARY, null);
+        Cursor c = db.rawQuery("SELECT itineraryDate, itineraryMarks FROM itineraries WHERE _id = " + id, null);
 
         while (c.moveToNext()){
             try {
@@ -82,7 +64,7 @@ public class ItineraryRecordedActivity extends FragmentActivity {
 
                 ByteArrayInputStream bis = new ByteArrayInputStream(data);
                 ObjectInputStream ois = new ObjectInputStream(bis);
-                itineraryMarks = (ArrayList<ItineraryMark>) ois.readObject();
+                itineraryPointMarks = (ArrayList<ItineraryPointMark>) ois.readObject();
             } catch (IOException | ClassNotFoundException e) {
                 e.printStackTrace();
             }
@@ -93,16 +75,16 @@ public class ItineraryRecordedActivity extends FragmentActivity {
         LinearLayout linearLayout = (LinearLayout)findViewById(R.id.itineraryInfo);
 
         ArrayList<String> infos = new ArrayList<>();
-        ItineraryMark firstMark = itineraryMarks.get(0);
-        ItineraryMark lastMark = itineraryMarks.get(itineraryMarks.size()-1);
+        ItineraryPointMark firstMark = itineraryPointMarks.get(0);
+        ItineraryPointMark lastMark = itineraryPointMarks.get(itineraryPointMarks.size()-1);
 
         infos.add("Mode: " + firstMark.getMode());
         SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        infos.add("Started Time: " + df.format(itineraryMarks.get(0).getCurrentTime()));
+        infos.add("Started Time: " + df.format(itineraryPointMarks.get(0).getCurrentTime()));
         int durationInSecond = (int)(lastMark.getCurrentTime() - firstMark.getCurrentTime()) / 1000;
         infos.add("Duration: " + (int)durationInSecond / 60 + "minutes, " + durationInSecond % 60 + "seconds.");
         double totalDistance = 0;
-        for(ItineraryMark m : itineraryMarks){
+        for(ItineraryPointMark m : itineraryPointMarks){
             totalDistance += m.getDistanceFromPreviousMark();
         }
         infos.add("Total Distance: " + totalDistance + "meters.");
@@ -137,10 +119,10 @@ public class ItineraryRecordedActivity extends FragmentActivity {
 
     private void setUpMap() {
 
-        LatLng center = new LatLng(itineraryMarks.get(0).getPosition()[0], itineraryMarks.get(0).getPosition()[1]);
+        LatLng center = new LatLng(itineraryPointMarks.get(0).getPosition()[0], itineraryPointMarks.get(0).getPosition()[1]);
 
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(center, DEFAULT_ZOOM_LEVEL));
-        for(ItineraryMark mark : itineraryMarks){
+        for(ItineraryPointMark mark : itineraryPointMarks){
             addMarkerToMap(mark);
         }
 
@@ -153,9 +135,9 @@ public class ItineraryRecordedActivity extends FragmentActivity {
             @Override
             public View getInfoContents(Marker marker) {
 
-                ItineraryMark mark = itineraryMarks.get(Integer.parseInt(marker.getTitle()));
+                ItineraryPointMark mark = itineraryPointMarks.get(Integer.parseInt(marker.getTitle()));
 
-                View v = getLayoutInflater().inflate(R.layout.info_window_layout, null);
+                LinearLayout v = (LinearLayout) getLayoutInflater().inflate(R.layout.info_window_layout, null);
 
 
                 TextView tvTitle = (TextView) v.findViewById(R.id.tv_title);
@@ -164,10 +146,13 @@ public class ItineraryRecordedActivity extends FragmentActivity {
 
 
                 try {
-                    Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), Uri.parse(mark.getImageURI()));
+                    BitmapFactory.Options bmpFactoryOptions = new BitmapFactory.Options();
+                    bmpFactoryOptions.outHeight = 120;
+                    bmpFactoryOptions.outWidth = 120;
+                    Bitmap bitmap = BitmapFactory.decodeFile(mark.getImageURI(), bmpFactoryOptions);
                     photoView.setImageBitmap(bitmap);
-                } catch (IOException | NullPointerException e) {
-                    // photo not exist
+                } catch (Exception e) {
+                    v.removeView(photoView);
                 }
 
                 tvTitle.setText("Marker No.: " + marker.getTitle());
@@ -178,17 +163,17 @@ public class ItineraryRecordedActivity extends FragmentActivity {
         });
     }
 
-    private void addMarkerToMap(ItineraryMark mark){
+    private void addMarkerToMap(ItineraryPointMark mark){
         if (mMap != null){
             mMap.addMarker(new MarkerOptions()
                     .position(new LatLng(mark.getPosition()[0], mark.getPosition()[1]))
-                    .title(itineraryMarks.indexOf(mark) + ""));
-            if(itineraryMarks.size() >=2 && itineraryMarks.indexOf(mark) != 0) {
+                    .title(itineraryPointMarks.indexOf(mark) + ""));
+            if(itineraryPointMarks.size() >=2 && itineraryPointMarks.indexOf(mark) != 0) {
 
-                ItineraryMark previousMark = itineraryMarks.get(itineraryMarks.indexOf(mark) - 1);
+                ItineraryPointMark previousMark = itineraryPointMarks.get(itineraryPointMarks.indexOf(mark) - 1);
 
-                ItineraryMark p1 = previousMark;
-                ItineraryMark p2 = mark;
+                ItineraryPointMark p1 = previousMark;
+                ItineraryPointMark p2 = mark;
                 double lat1 = p1.getPosition()[0];
                 double lng1 = p1.getPosition()[1];
                 double lat2 = p2.getPosition()[0];
@@ -199,6 +184,15 @@ public class ItineraryRecordedActivity extends FragmentActivity {
                 Polyline polyline = mMap.addPolyline(lineOptions);
             }
         }
+    }
+
+    @Override
+    // need to go back to the menu
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        Intent intent = new Intent(this, HistoriesActivity.class);
+        startActivity(intent);
+
+        return true;
     }
 
 }

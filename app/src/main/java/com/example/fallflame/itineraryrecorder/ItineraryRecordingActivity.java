@@ -2,13 +2,16 @@ package com.example.fallflame.itineraryrecorder;
 
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -21,20 +24,10 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
-import android.telephony.CellIdentityCdma;
-import android.telephony.CellInfo;
-import android.telephony.CellInfoCdma;
-import android.telephony.CellInfoGsm;
-import android.telephony.CellInfoLte;
-import android.telephony.CellInfoWcdma;
-import android.telephony.CellLocation;
-import android.telephony.TelephonyManager;
-import android.telephony.cdma.CdmaCellLocation;
-import android.telephony.gsm.GsmCellLocation;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
-import android.widget.RelativeLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -44,23 +37,11 @@ import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
-import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.json.JSONArray;
-import org.json.JSONObject;
-
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.ObjectOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -69,39 +50,47 @@ import java.util.List;
 
 public class ItineraryRecordingActivity extends FragmentActivity {
 
-    // some constant use by android system
+    // constance for image capture
     private static final int MEDIA_TYPE_IMAGE = 1;
     private static final int CAPTURE_IMAGE_ACTIVITY_REQUEST_CODE = 100;
 
-    // Default values, for test
-    final static private double DEFAULT_lNG = -73.597929;
-    final static private double DEFAULT_LAT = 45.508536;
-    final static private int DEFAULT_ZOOM_LEVEL = 12;
-
     private GoogleMap mMap; // Might be null if Google Play services APK is not available.
-
-    private String mode = "GPS"; //"GPS" or "Cellular", emulator can only use GPS, for test
+    private String mode = "Cellular"; //"GPS" or "Cellular", emulator can only use GPS, for test
     private int markInterval = 600; // a default interval, for test
+    private int zoomLevel;
 
-    // used for store the
+    // store the location get from listener
     private Location currentLocation;
+    // store the time when location get updated
     private double currentLocationTimestamp;
-    final static private int validityOfCurrentLocation = 30000; //30s
+    final static private int validityOfCurrentLocation = 5000; //5s
 
-    private ArrayList<ItineraryMark> itineraryMarks = new ArrayList<>();
-    private ArrayList<BaseStationMark> baseStationMarks = new ArrayList<>();
+    // store the points during this itinerary
+    private ArrayList<ItineraryPointMark> itineraryPointMarks = new ArrayList<>();
 
+    // a count down timer to indicate when next capture will come
     private CountDownTimer countDownTimer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_itinerary_recording);
+
+        // get data from configuration activity
+        Intent intent = getIntent();
+        this.mode = intent.getStringExtra("mode");
+        markInterval = intent.getIntExtra("interval", 600);
+        zoomLevel = intent.getIntExtra("zoomLevel", 10);
+
         setUpMapIfNeeded();
 
-        resetCountDownTimer();
-        registerLocationListener();
+        // Put two marker for initial and final positions in maps if possible
+        setInitialAndFinalPositionsOnMap();
 
+        // reset the count down timer
+        resetCountDownTimer();
+
+        registerLocationListener();
     }
 
     @Override
@@ -124,8 +113,8 @@ public class ItineraryRecordingActivity extends FragmentActivity {
     }
 
     private void setUpMap() {
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(DEFAULT_LAT, DEFAULT_lNG), DEFAULT_ZOOM_LEVEL));
         mMap.setMyLocationEnabled(true);
+        //customize the modal window
         mMap.setInfoWindowAdapter(new GoogleMap.InfoWindowAdapter() {
             @Override
             public View getInfoWindow(Marker marker) {
@@ -135,36 +124,83 @@ public class ItineraryRecordingActivity extends FragmentActivity {
             @Override
             public View getInfoContents(Marker marker) {
 
-                ItineraryMark mark = itineraryMarks.get(Integer.parseInt(marker.getTitle()));
-
-                View v = getLayoutInflater().inflate(R.layout.info_window_layout, null);
-
-
-                TextView tvTitle = (TextView) v.findViewById(R.id.tv_title);
-                TextView tvLng = (TextView) v.findViewById(R.id.tv_info);
-                ImageView photoView = (ImageView) v.findViewById(R.id.photoView);
-
-
                 try {
-                    Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), Uri.parse(mark.getImageURI()));
-                    photoView.setImageBitmap(bitmap);
-                } catch (IOException | NullPointerException e) {
-                    // photo not exist
+                    ItineraryPointMark mark = itineraryPointMarks.get(Integer.parseInt(marker.getTitle()));
+
+                    LinearLayout v = (LinearLayout) getLayoutInflater().inflate(R.layout.info_window_layout, null);
+
+                    TextView tvTitle = (TextView) v.findViewById(R.id.tv_title);
+                    TextView tvLng = (TextView) v.findViewById(R.id.tv_info);
+                    ImageView photoView = (ImageView) v.findViewById(R.id.photoView);
+
+                    try {
+                        BitmapFactory.Options bmpFactoryOptions = new BitmapFactory.Options();
+                        bmpFactoryOptions.outHeight = 120;
+                        bmpFactoryOptions.outWidth = 120;
+                        Bitmap bitmap = BitmapFactory.decodeFile(mark.getImageURI(), bmpFactoryOptions);
+                        photoView.setImageBitmap(bitmap);
+                    } catch (Exception e) {
+                        v.removeView(photoView);
+                    }
+
+                    tvTitle.setText("Marker No.: " + marker.getTitle());
+                    tvLng.setText(mark.getInfoString());
+
+                    return v;
+                } catch (Exception e){
+                    return null;
                 }
-
-                tvTitle.setText("Marker No.: " + marker.getTitle());
-                tvLng.setText(mark.getInfoString());
-
-                return v;
             }
         });
     }
 
-    public void makeMark(){
+    // if the user input the initial and/or final address, need to put a marker on map
+    private void setInitialAndFinalPositionsOnMap(){
+        Intent intent = getIntent();
+        Geocoder geocoder = new Geocoder(getBaseContext());
+        List<Address> addresses;
+        String initialPosition = intent.getStringExtra("initialPosition");
+        if (initialPosition.length() != 0) {
+            try {
+                addresses = geocoder.getFromLocationName(initialPosition, 1);
+                if(addresses.size() > 0){
+                    if(mMap != null) {
+                        mMap.addMarker(new MarkerOptions()
+                                .position(new LatLng(addresses.get(0).getLatitude(), addresses.get(0).getLongitude()))
+                                .title("Initial Point"));
+                        mMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng(addresses.get(0).getLatitude(), addresses.get(0).getLongitude())));
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        String finalPosition = intent.getStringExtra("finalPosition");
+        if (intent.getStringExtra("finalPosition").length() != 0) {
+            try {
+                addresses = geocoder.getFromLocationName(finalPosition, 1);
+                if(addresses.size() > 0){
+                    if(mMap != null) {
+                        mMap.addMarker(new MarkerOptions()
+                                .position(new LatLng(addresses.get(0).getLatitude(), addresses.get(0).getLongitude()))
+                                .title("Final Point"));
+                    }
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+
+
+    private void makeMark(){
 
         if (currentLocation == null
                 || System.currentTimeMillis() - currentLocationTimestamp > validityOfCurrentLocation) {
 
+            //if the location is no longer valid, inform the user
             CharSequence text = "Cannot get the current position.";
             int duration = Toast.LENGTH_SHORT;
             Toast toast = Toast.makeText(getApplicationContext(), text, duration);
@@ -172,192 +208,24 @@ public class ItineraryRecordingActivity extends FragmentActivity {
 
         } else {
 
-            ItineraryMark mark = new ItineraryMark();
+            ItineraryPointMark mark = new ItineraryPointMark();
 
             mark.setPosition(currentLocation.getLatitude(),
                     currentLocation.getLongitude(),
                     currentLocation.getAltitude());
             mark.setBatteryLevel(getCurrentBatteryPercentage());
             mark.setMode(mode);
-            if(!itineraryMarks.isEmpty())
-                mark.setPreviousMark(itineraryMarks.get(itineraryMarks.size() - 1));
-            itineraryMarks.add(mark);
+            if(!itineraryPointMarks.isEmpty())
+                mark.setPreviousMark(itineraryPointMarks.get(itineraryPointMarks.size() - 1));
+            itineraryPointMarks.add(mark);
+            addWifiInfo(itineraryPointMarks.indexOf(mark));
             takePhoto(); // take photo will always add the Uri to the last element in itineraryMarks array.
             addMarkerToMap(mark); // add a marker
-            if (mode == "GPS")
-                addWifiInfo(itineraryMarks.indexOf(mark));
 
-            if (mode == "Cellular")
-                addBaseStationInfo();
         }
 
         resetCountDownTimer();
     }
-
-    private void addBaseStationInfo(){
-        //BaseStationMark bsm = new BaseStationMark();
-        TelephonyManager mTelephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
-
-        for (CellInfo cellInfo : mTelephonyManager.getAllCellInfo()) {
-            BaseStationMark bsm = new BaseStationMark();
-            bsm.setMcc(mTelephonyManager.getNetworkOperator().substring(0, 3));
-            bsm.setMnc(mTelephonyManager.getNetworkOperator().substring(3,5));
-            bsm.setMnc_name(mTelephonyManager.getNetworkOperatorName());
-            switch (mTelephonyManager.getNetworkType()){
-                case 7:
-                    bsm.setType_r("1xRTT");
-                    break;
-                case 4:
-                    bsm.setType_r("CDMA");
-                    break;
-                case 2:
-                    bsm.setType_r("EDGE");
-                    break;
-                case 14:
-                    bsm.setType_r("eHRPD");
-                    break;
-                case 5:
-                    bsm.setType_r("EVDO rev. 0");
-                    break;
-                case 6:
-                    bsm.setType_r("EVDO rev. A");
-                    break;
-                case 12:
-                    bsm.setType_r("EVDO rev. B");
-                    break;
-                case 1:
-                    bsm.setType_r("GPRS");
-                    break;
-                case 8:
-                    bsm.setType_r("HSDPA");
-                    break;
-                case 10:
-                    bsm.setType_r("HSPA");
-                    break;
-                case 15:
-                    bsm.setType_r("HSPA+");
-                    break;
-                case 9:
-                    bsm.setType_r("HSUPA");
-                    break;
-                case 11:
-                    bsm.setType_r("iDen");
-                    break;
-                case 13:
-                    bsm.setType_r("LTE");
-                    break;
-                case 3:
-                    bsm.setType_r("UMTS");
-                    break;
-                case 0:
-                    bsm.setType_r("Unknown");
-                    break;
-            }
-
-            // cell_id, lac, lat, lng, niv_sig_sb
-            if (cellInfo instanceof CellInfoCdma){
-                CellInfoCdma cellInfoCdma = (CellInfoCdma) cellInfo;
-                bsm.setNiv_sig_sb(cellInfoCdma.getCellSignalStrength().getDbm() + "dbm");
-                bsm.setCell_id(cellInfoCdma.getCellIdentity().getBasestationId());
-                bsm.setLac(cellInfoCdma.getCellIdentity().getNetworkId());
-                if (cellInfoCdma.getCellIdentity().getLatitude() != Integer.MAX_VALUE) //means no value
-                    bsm.setLat_sb(cellInfoCdma.getCellIdentity().getLatitude()/14400); // It is represented in units of 0.25 seconds
-                if (cellInfoCdma.getCellIdentity().getLongitude() != Integer.MAX_VALUE) //means no value
-                    bsm.setLong_sb(cellInfoCdma.getCellIdentity().getLongitude() / 14400); // It is represented in units of 0.25 seconds
-
-            } else if (cellInfo instanceof CellInfoGsm){
-                CellInfoGsm cellInfoGsm = (CellInfoGsm) cellInfo;
-                bsm.setNiv_sig_sb(cellInfoGsm.getCellSignalStrength().getDbm() + "dbm");
-                bsm.setCell_id(cellInfoGsm.getCellIdentity().getCid());
-                bsm.setLac(cellInfoGsm.getCellIdentity().getLac());
-
-            } else if (cellInfo instanceof CellInfoLte){
-                CellInfoLte cellInfoLte = (CellInfoLte) cellInfo;
-                bsm.setNiv_sig_sb(cellInfoLte.getCellSignalStrength().getDbm() + "dbm");
-                bsm.setCell_id(cellInfoLte.getCellIdentity().getCi());
-                // LTE cannot get a location
-
-            } else if (cellInfo instanceof CellInfoWcdma){
-                CellInfoWcdma cellInfoWcdma = (CellInfoWcdma) cellInfo;
-                bsm.setNiv_sig_sb(cellInfoWcdma.getCellSignalStrength().getDbm() + "dbm");
-                bsm.setLac(cellInfoWcdma.getCellIdentity().getLac());
-                bsm.setCell_id(cellInfoWcdma.getCellIdentity().getCid());
-            }
-
-            for (BaseStationMark b : baseStationMarks){
-                if (b.getCell_id() == bsm.getCell_id())
-                    return; // base station already added
-            }
-
-            if ( cellInfo instanceof CellInfoGsm || cellInfo instanceof  CellInfoWcdma &&
-                   bsm.getCell_id() != 0 && bsm.getCell_id() != -1 && bsm.getCell_id() != Integer.MAX_VALUE
-                && bsm.getLac() !=0 && bsm.getLac()!=-1 && bsm.getCell_id() != Integer.MAX_VALUE    ){
-
-                double[] latlng = getBaseStation(bsm.getCell_id(),
-                                                 bsm.getLac(),
-                                                 Integer.valueOf(bsm.getMcc()),
-                                                 Integer.valueOf(bsm.getMnc()));
-                bsm.setLat_sb(latlng[0]);
-                bsm.setLong_sb(latlng[1]);
-            }
-
-            baseStationMarks.add(bsm);
-
-        }
-    }
-
-    public double[] getBaseStation(int cid, int lac, int mcc, int mnc) {
-        double[] latlng = new double[]{0.0, 0.0};
-
-        try {
-
-            JSONObject holder = new JSONObject();
-
-            JSONArray array = new JSONArray();
-            JSONObject data = new JSONObject();
-            data.put("cell_id", cid);
-            data.put("locationAreaCode", lac);
-            data.put("mobileCountryCode", mcc);
-            data.put("mobileNetworkCode", mnc);
-            array.put(data);
-            holder.put("cell_towers", array);
-
-            DefaultHttpClient client = new DefaultHttpClient();
-
-            HttpPost post = new HttpPost("https://www.googleapis.com/geolocation/v1/geolocate?key=API_KEY");
-
-            StringEntity se = new StringEntity(holder.toString());
-
-            post.setEntity(se);
-            HttpResponse resp = client.execute(post);
-
-            HttpEntity entity = resp.getEntity();
-
-            BufferedReader br = new BufferedReader(new InputStreamReader(entity.getContent()));
-            StringBuffer sb = new StringBuffer();
-            String result = br.readLine();
-
-            Log.e("GetBaseStation", result);
-
-            while (result != null) {
-
-                sb.append(result);
-                result = br.readLine();
-            }
-            JSONObject jsonObject = new JSONObject(sb.toString());
-
-            JSONObject jsonObject1 = new JSONObject(jsonObject.getString("location"));
-
-            latlng[0] = Double.parseDouble(jsonObject1.getString("lat"));
-            latlng[1] = Double.parseDouble(jsonObject1.getString("lng"));
-
-        } catch (Exception e) {
-        }
-
-        return latlng;
-    }
-
-
 
     private void addWifiInfo(final int markIndex){
         final WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
@@ -383,17 +251,16 @@ public class ItineraryRecordingActivity extends FragmentActivity {
                     ScanResult hr = scanResultList.get(highestLevelIndex);
                     String wifiInfo = "PA_Wifi(" + hr.SSID + ", " + hr.level + "dBm, " + hr.BSSID +")";
 
-                    itineraryMarks.get(markIndex).setWifiInfo(wifiInfo);
+                    itineraryPointMarks.get(markIndex).setWifiInfo(wifiInfo);
 
-                    new AlertDialog.Builder(getApplicationContext()).setTitle("Wifi points found.")
-                            .setPositiveButton("OK", new DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(DialogInterface dialog, int which) {
-                                }
-                            })
-                            .show();
+                    CharSequence text = "Wifi points found.";
+                    int duration = Toast.LENGTH_LONG;
+                    Toast toast = Toast.makeText(getApplicationContext(), text, duration);
+                    toast.show();
+
                 }
 
+                unregisterReceiver(this);
 
             }
         }, i );
@@ -401,18 +268,19 @@ public class ItineraryRecordingActivity extends FragmentActivity {
         wifiManager.startScan();
     }
 
+    // This method will let the user take a mark immediately. It will reset the count down at the same time
     public void makeMark(View view) {
         makeMark();
     }
 
-    private void addMarkerToMap(ItineraryMark mark){
+    private void addMarkerToMap(ItineraryPointMark mark){
         if (mMap != null){
             mMap.addMarker(new MarkerOptions()
                     .position(new LatLng(mark.getPosition()[0], mark.getPosition()[1]))
-                    .title(itineraryMarks.size() - 1 + ""));
-            if(itineraryMarks.size() >=2) {
-                ItineraryMark p1 = itineraryMarks.get(itineraryMarks.size()-2);
-                ItineraryMark p2 = itineraryMarks.get(itineraryMarks.size()-1);
+                    .title(itineraryPointMarks.size() - 1 + ""));
+            if(itineraryPointMarks.size() >=2) {
+                ItineraryPointMark p1 = itineraryPointMarks.get(itineraryPointMarks.size()-2);
+                ItineraryPointMark p2 = itineraryPointMarks.get(itineraryPointMarks.size()-1);
                 double lat1 = p1.getPosition()[0];
                 double lng1 = p1.getPosition()[1];
                 double lat2 = p2.getPosition()[0];
@@ -420,7 +288,7 @@ public class ItineraryRecordingActivity extends FragmentActivity {
                 PolylineOptions lineOptions = new PolylineOptions()
                         .add(new LatLng(lat1, lng1))
                         .add(new LatLng(lat2, lng2));
-                Polyline polyline = mMap.addPolyline(lineOptions);
+                mMap.addPolyline(lineOptions);
             }
         }
     }
@@ -440,21 +308,18 @@ public class ItineraryRecordingActivity extends FragmentActivity {
             public void onProviderDisabled(String provider) {}
         };
 
-    // Register the listener with the Location Manager to receive location updates
-
-        String locationProvider = "";
-        if (mode == "GPS"){
-            locationProvider = LocationManager.GPS_PROVIDER;
-
-        } else if (mode == "Cellular"){
-            locationProvider = LocationManager.NETWORK_PROVIDER;
-        }
+        // Register the listener with the Location Manager to receive location updates
+        // GPS provider is for test
+        String locationProvider = LocationManager.GPS_PROVIDER;
         locationManager.requestLocationUpdates(locationProvider, 0, 0, locationListener);
+        locationProvider = LocationManager.NETWORK_PROVIDER;
+        locationManager.requestLocationUpdates(locationProvider, 0, 0, locationListener);
+
     }
 
     private float getCurrentBatteryPercentage(){
-        IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-        Intent batteryStatus =  getApplicationContext().registerReceiver(null, ifilter);
+        IntentFilter intentFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+        Intent batteryStatus =  getApplicationContext().registerReceiver(null, intentFilter);
         int level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
         int scale = batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
         return level / (float)scale;
@@ -463,7 +328,7 @@ public class ItineraryRecordingActivity extends FragmentActivity {
     private void updateLocation(Location location){
         currentLocation = location;
         currentLocationTimestamp = System.currentTimeMillis();
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(location.getLatitude(), location.getLongitude()), DEFAULT_ZOOM_LEVEL));
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(location.getLatitude(), location.getLongitude()), zoomLevel));
     }
 
     private void takePhoto(){
@@ -487,7 +352,7 @@ public class ItineraryRecordingActivity extends FragmentActivity {
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
 
         Uri fileUri = Uri.fromFile(getOutputMediaFile(MEDIA_TYPE_IMAGE)); // create a file to save the image
-        itineraryMarks.get(itineraryMarks.size() - 1).setImageURI(fileUri.toString());
+        itineraryPointMarks.get(itineraryPointMarks.size() - 1).setImageURI(fileUri.toString());
         intent.putExtra(MediaStore.EXTRA_OUTPUT, fileUri); // set the image file name
 
         // start the image capture Intent
@@ -553,31 +418,32 @@ public class ItineraryRecordingActivity extends FragmentActivity {
         }.start();
     }
 
+    // This method will finish this recording, store the results in database.
     public void finishRecorder(View view){
+        if(itineraryPointMarks.size() != 0) try {
+            long id;
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            ObjectOutputStream oos = new ObjectOutputStream(bos);
+            oos.writeObject(itineraryPointMarks);
+            oos.flush();
+            oos.close();
+            bos.close();
 
-        if(itineraryMarks.size() != 0) {
-            try {
-                ByteArrayOutputStream bos = new ByteArrayOutputStream();
-                ObjectOutputStream oos = new ObjectOutputStream(bos);
-                oos.writeObject(itineraryMarks);
-                oos.flush();
-                oos.close();
-                bos.close();
+            byte[] data = bos.toByteArray();
 
-                byte[] data = bos.toByteArray();
+            SQLiteDatabase db = openOrCreateDatabase("itinerary.db", Context.MODE_PRIVATE, null);
+            ContentValues values = new ContentValues();
+            values.put("itineraryDate", System.currentTimeMillis());
+            values.put("itineraryMarks", data);
+            id = db.insert("itineraries", null, values);
 
-                SQLiteDatabase db = openOrCreateDatabase("itinerary.db", Context.MODE_PRIVATE, null);
+            Intent intent = new Intent(this, ItineraryReviewActivity.class);
+            intent.putExtra("recordId", id);
+            startActivity(intent);
 
-                db.execSQL("CREATE TABLE IF NOT EXISTS itineraries (_id INTEGER PRIMARY KEY AUTOINCREMENT, itineraryDate INTEGER, itineraryMarks BLOB)");
-                db.execSQL("INSERT INTO itineraries VALUES (NULL, ?, ?)", new Object[]{System.currentTimeMillis(), data});
-
-
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            return;
         }
-
-        Intent intent = new Intent(this, ItineraryRecordedActivity.class);
-        startActivity(intent);
     }
 }

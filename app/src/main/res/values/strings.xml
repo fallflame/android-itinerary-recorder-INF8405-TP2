@@ -3,5 +3,14 @@
 
     <string name="app_name">ItineraryRecorder</string>
     <string name="title_activity_itinerary_maps">Itinerary</string>
+
     <color name="bg_color">#ffffff</color>
+
+    <string name="title_activity_menu">menuActivity</string>
+    <string name="hello_world">Hello world!</string>
+    <string name="action_settings">Settings</string>
+    <string name="title_activity_configuration">ConfigurationActivity</string>
+    <string name="title_activity_history">HistoryActivity</string>
+    <string name="title_activity_entry">EntryActivity</string>
+
 </resources>

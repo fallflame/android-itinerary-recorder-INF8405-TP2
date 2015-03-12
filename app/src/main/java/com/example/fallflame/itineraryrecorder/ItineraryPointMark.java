@@ -5,8 +5,8 @@ import java.io.Serializable;
 /**
  * Created by FallFlame on 15/3/2.
  */
-public class ItineraryMark implements Serializable{
-    private ItineraryMark previousMark;
+public class ItineraryPointMark implements Serializable{
+    private ItineraryPointMark previousMark;
     private String mode;
     private double[] position; //double[3] lat, lng, alt
     private long currentTime;
@@ -15,7 +15,7 @@ public class ItineraryMark implements Serializable{
     private String wifiInfo;
 
 
-    public ItineraryMark(){
+    public ItineraryPointMark(){
         this.currentTime = System.currentTimeMillis();
     }
 
@@ -122,15 +122,17 @@ public class ItineraryMark implements Serializable{
                     + "Battery: " + batteryLevel + "\n"
                     + "Direction: " + getDirection() + "\n"
                     + "Distance(relative): " + getDistanceFromPreviousMark() + "\n"
-                    + "Speed: " + getSpeed() + "\n"
-                    + "Wifi: " + getWifiInfo();
+                    + "Speed: " + getSpeed() + "\n";
+
+        if (getWifiInfo() != null)
+            ret += "Wifi: " + getWifiInfo();
 
         return ret;
     }
 
     /******************* Setter and Getter *******************/
 
-    public void setPreviousMark(ItineraryMark previousMark) {
+    public void setPreviousMark(ItineraryPointMark previousMark) {
         this.previousMark = previousMark;
     }
 
