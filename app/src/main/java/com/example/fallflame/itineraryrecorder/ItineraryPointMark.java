@@ -1,6 +1,7 @@
 package com.example.fallflame.itineraryrecorder;
 
 import java.io.Serializable;
+import java.text.SimpleDateFormat;
 
 /**
  * Created by FallFlame on 15/3/2.
@@ -115,14 +116,18 @@ public class ItineraryPointMark implements Serializable{
 
     public String getInfoString(){
 
+        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        String timeString = df.format(currentTime);
+        java.text.DecimalFormat decimalFormat6 = new java.text.DecimalFormat(".000000");
+
         String ret =  "Mode: " + mode + "\n"
-                    + "Date: " + currentTime + "\n"
-                    + "Lat: " + position[0] + "\n"
-                    + "Lng: " + position[1] + "\n"
-                    + "Battery: " + batteryLevel + "\n"
+                    + "Date: " + timeString + "\n"
+                    + "Lat: " + decimalFormat6.format(position[0]) + "\n"
+                    + "Lng: " + decimalFormat6.format(position[1]) + "\n"
+                    + "Battery: " + (int)(batteryLevel * 100) + "%\n"
                     + "Direction: " + getDirection() + "\n"
-                    + "Distance(relative): " + getDistanceFromPreviousMark() + "\n"
-                    + "Speed: " + getSpeed() + "\n";
+                    + "Distance(relative): " + (int)getDistanceFromPreviousMark() + "\n"
+                    + "Speed: " + (int) getSpeed() + " m/s\n";
 
         if (getWifiInfo() != null)
             ret += "Wifi: " + getWifiInfo();

@@ -31,13 +31,18 @@ public class ItineraryConfigurationActivity extends ActionBarActivity {
 
         int interval;
         int zoomLevel;
+
+
+        // return when the input is not valid
         try{
             interval = Integer.parseInt(intervalMinET.getText().toString()) * 60;
             zoomLevel = Integer.parseInt(zoomLevelET.getText().toString());
         } catch (Exception e) {
+            // return when the input is not valid
             return;
         }
 
+        // return when the input is not valid
         if (zoomLevel < 1 || zoomLevel > 20 )
             return;
 

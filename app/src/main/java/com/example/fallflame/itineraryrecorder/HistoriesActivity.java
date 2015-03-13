@@ -10,6 +10,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -150,7 +151,16 @@ public class HistoriesActivity extends ActionBarActivity {
         SQLiteDatabase db = openOrCreateDatabase("itinerary.db", Context.MODE_PRIVATE, null);
         db.execSQL("DELETE FROM itineraries");
         LinearLayout linearLayout = (LinearLayout)findViewById(R.id.linearLayout);
-        linearLayout.removeAllViewsInLayout();
+        linearLayout.removeAllViews();
         db.close();
+    }
+
+    @Override
+    // need to go back to the menu
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        Intent intent = new Intent(this, EntryActivity.class);
+        startActivity(intent);
+
+        return true;
     }
 }

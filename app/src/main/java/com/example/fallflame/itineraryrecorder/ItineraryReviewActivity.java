@@ -32,9 +32,8 @@ import java.util.ArrayList;
 public class ItineraryReviewActivity extends FragmentActivity {
 
     // Default values, for test
-    //final static private int DEFAULT_NO_ITINERARY = 1;
-    final static private int DEFAULT_ZOOM_LEVEL = 12;
-    private long id; //id of the record
+    final static private int DEFAULT_ZOOM_LEVEL = 18;
+    private int id; //id of the record
 
     private GoogleMap mMap; // Might be null if Google Play services APK is not available.
 
@@ -45,7 +44,7 @@ public class ItineraryReviewActivity extends FragmentActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_itinerary_recorded);
 
-        id = getIntent().getLongExtra("recordId", -1);
+        id = getIntent().getIntExtra("recordId", -1);
 
         loadItinerary();
         setItineraryInfo();
@@ -82,12 +81,12 @@ public class ItineraryReviewActivity extends FragmentActivity {
         SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         infos.add("Started Time: " + df.format(itineraryPointMarks.get(0).getCurrentTime()));
         int durationInSecond = (int)(lastMark.getCurrentTime() - firstMark.getCurrentTime()) / 1000;
-        infos.add("Duration: " + (int)durationInSecond / 60 + "minutes, " + durationInSecond % 60 + "seconds.");
+        infos.add("Duration: " + (int)durationInSecond / 60 + " minutes, " + durationInSecond % 60 + " seconds.");
         double totalDistance = 0;
         for(ItineraryPointMark m : itineraryPointMarks){
             totalDistance += m.getDistanceFromPreviousMark();
         }
-        infos.add("Total Distance: " + totalDistance + "meters.");
+        infos.add("Total Distance: " + (int)totalDistance + "meters.");
         infos.add("Battery Consumed: " + (int) (firstMark.getBatteryLevel() - lastMark.getBatteryLevel()) * 100 + "%.");
 
         for(String info : infos){
@@ -146,10 +145,7 @@ public class ItineraryReviewActivity extends FragmentActivity {
 
 
                 try {
-                    BitmapFactory.Options bmpFactoryOptions = new BitmapFactory.Options();
-                    bmpFactoryOptions.outHeight = 120;
-                    bmpFactoryOptions.outWidth = 120;
-                    Bitmap bitmap = BitmapFactory.decodeFile(mark.getImageURI(), bmpFactoryOptions);
+                    Bitmap bitmap = ImageResizer.decodeSampledBitmapFromFile(mark.getImageURI(), 120, 120);
                     photoView.setImageBitmap(bitmap);
                 } catch (Exception e) {
                     v.removeView(photoView);

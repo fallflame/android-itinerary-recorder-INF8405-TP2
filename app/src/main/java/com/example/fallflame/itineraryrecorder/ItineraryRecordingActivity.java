@@ -42,6 +42,7 @@ import com.google.android.gms.maps.model.PolylineOptions;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.ObjectOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -56,14 +57,14 @@ public class ItineraryRecordingActivity extends FragmentActivity {
 
     private GoogleMap mMap; // Might be null if Google Play services APK is not available.
     private String mode = "Cellular"; //"GPS" or "Cellular", emulator can only use GPS, for test
-    private int markInterval = 600; // a default interval, for test
+    private int markInterval; // interval of making mark
     private int zoomLevel;
 
     // store the location get from listener
     private Location currentLocation;
     // store the time when location get updated
     private double currentLocationTimestamp;
-    final static private int validityOfCurrentLocation = 5000; //5s
+    final static private int validityOfCurrentLocation = 20000; //20s
 
     // store the points during this itinerary
     private ArrayList<ItineraryPointMark> itineraryPointMarks = new ArrayList<>();
@@ -85,7 +86,8 @@ public class ItineraryRecordingActivity extends FragmentActivity {
         setUpMapIfNeeded();
 
         // Put two marker for initial and final positions in maps if possible
-        setInitialAndFinalPositionsOnMap();
+        setPositionOnMap("initial", intent.getStringExtra("initialPosition"));
+        setPositionOnMap("final", intent.getStringExtra("finalPosition"));
 
         // reset the count down timer
         resetCountDownTimer();
@@ -105,6 +107,7 @@ public class ItineraryRecordingActivity extends FragmentActivity {
             // Try to obtain the map from the SupportMapFragment.
             mMap = ((SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map))
                     .getMap();
+            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(0, 0), zoomLevel));
             // Check if we were successful in obtaining the map.
             if (mMap != null) {
                 setUpMap();
@@ -134,10 +137,8 @@ public class ItineraryRecordingActivity extends FragmentActivity {
                     ImageView photoView = (ImageView) v.findViewById(R.id.photoView);
 
                     try {
-                        BitmapFactory.Options bmpFactoryOptions = new BitmapFactory.Options();
-                        bmpFactoryOptions.outHeight = 120;
-                        bmpFactoryOptions.outWidth = 120;
-                        Bitmap bitmap = BitmapFactory.decodeFile(mark.getImageURI(), bmpFactoryOptions);
+
+                        Bitmap bitmap = ImageResizer.decodeSampledBitmapFromFile(mark.getImageURI(), 120, 120);
                         photoView.setImageBitmap(bitmap);
                     } catch (Exception e) {
                         v.removeView(photoView);
@@ -154,42 +155,28 @@ public class ItineraryRecordingActivity extends FragmentActivity {
         });
     }
 
+
+
     // if the user input the initial and/or final address, need to put a marker on map
-    private void setInitialAndFinalPositionsOnMap(){
-        Intent intent = getIntent();
+    private void setPositionOnMap(String title, String location){
+
+        if (location.length() == 0)
+            return;
+
         Geocoder geocoder = new Geocoder(getBaseContext());
         List<Address> addresses;
-        String initialPosition = intent.getStringExtra("initialPosition");
-        if (initialPosition.length() != 0) {
-            try {
-                addresses = geocoder.getFromLocationName(initialPosition, 1);
-                if(addresses.size() > 0){
-                    if(mMap != null) {
-                        mMap.addMarker(new MarkerOptions()
-                                .position(new LatLng(addresses.get(0).getLatitude(), addresses.get(0).getLongitude()))
-                                .title("Initial Point"));
-                        mMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng(addresses.get(0).getLatitude(), addresses.get(0).getLongitude())));
-                    }
+        try {
+            addresses = geocoder.getFromLocationName(location, 1);
+            if(addresses.size() > 0){
+                if(mMap != null) {
+                    mMap.addMarker(new MarkerOptions()
+                            .position(new LatLng(addresses.get(0).getLatitude(), addresses.get(0).getLongitude()))
+                            .title(title));
+                    mMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng(addresses.get(0).getLatitude(), addresses.get(0).getLongitude())));
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
             }
-        }
-
-        String finalPosition = intent.getStringExtra("finalPosition");
-        if (intent.getStringExtra("finalPosition").length() != 0) {
-            try {
-                addresses = geocoder.getFromLocationName(finalPosition, 1);
-                if(addresses.size() > 0){
-                    if(mMap != null) {
-                        mMap.addMarker(new MarkerOptions()
-                                .position(new LatLng(addresses.get(0).getLatitude(), addresses.get(0).getLongitude()))
-                                .title("Final Point"));
-                    }
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
@@ -218,16 +205,17 @@ public class ItineraryRecordingActivity extends FragmentActivity {
             if(!itineraryPointMarks.isEmpty())
                 mark.setPreviousMark(itineraryPointMarks.get(itineraryPointMarks.size() - 1));
             itineraryPointMarks.add(mark);
-            addWifiInfo(itineraryPointMarks.indexOf(mark));
-            takePhoto(); // take photo will always add the Uri to the last element in itineraryMarks array.
-            addMarkerToMap(mark); // add a marker
 
+            addWifiInfo(itineraryPointMarks.indexOf(mark));
+            takePhoto(itineraryPointMarks.indexOf(mark));
+            addMarkerToMap(mark); // add a marker
         }
 
         resetCountDownTimer();
     }
 
     private void addWifiInfo(final int markIndex){
+
         final WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
 
         if(!wifiManager.isWifiEnabled())
@@ -261,11 +249,11 @@ public class ItineraryRecordingActivity extends FragmentActivity {
                 }
 
                 unregisterReceiver(this);
-
             }
         }, i );
 
         wifiManager.startScan();
+
     }
 
     // This method will let the user take a mark immediately. It will reset the count down at the same time
@@ -328,15 +316,15 @@ public class ItineraryRecordingActivity extends FragmentActivity {
     private void updateLocation(Location location){
         currentLocation = location;
         currentLocationTimestamp = System.currentTimeMillis();
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(location.getLatitude(), location.getLongitude()), zoomLevel));
+        //mMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng(location.getLatitude(), location.getLongitude())));
     }
 
-    private void takePhoto(){
+    private void takePhoto(final int index){
         new AlertDialog.Builder(this).setTitle("Take a photo?")
                 .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
-                        changeToImageCaptureActivity();
+                        changeToImageCaptureActivity(index);
                     }
                 })
                 .setNegativeButton("No", new DialogInterface.OnClickListener() {
@@ -346,13 +334,13 @@ public class ItineraryRecordingActivity extends FragmentActivity {
                 .show();
     }
 
-    private void changeToImageCaptureActivity(){
+    private void changeToImageCaptureActivity(int index){
 
         // create Intent to take a picture and return control to the calling application
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
 
         Uri fileUri = Uri.fromFile(getOutputMediaFile(MEDIA_TYPE_IMAGE)); // create a file to save the image
-        itineraryPointMarks.get(itineraryPointMarks.size() - 1).setImageURI(fileUri.toString());
+        itineraryPointMarks.get(index).setImageURI(fileUri.getPath());
         intent.putExtra(MediaStore.EXTRA_OUTPUT, fileUri); // set the image file name
 
         // start the image capture Intent
@@ -421,7 +409,7 @@ public class ItineraryRecordingActivity extends FragmentActivity {
     // This method will finish this recording, store the results in database.
     public void finishRecorder(View view){
         if(itineraryPointMarks.size() != 0) try {
-            long id;
+            int id;
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             ObjectOutputStream oos = new ObjectOutputStream(bos);
             oos.writeObject(itineraryPointMarks);
@@ -435,7 +423,7 @@ public class ItineraryRecordingActivity extends FragmentActivity {
             ContentValues values = new ContentValues();
             values.put("itineraryDate", System.currentTimeMillis());
             values.put("itineraryMarks", data);
-            id = db.insert("itineraries", null, values);
+            id = (int) db.insert("itineraries", null, values);
 
             Intent intent = new Intent(this, ItineraryReviewActivity.class);
             intent.putExtra("recordId", id);
