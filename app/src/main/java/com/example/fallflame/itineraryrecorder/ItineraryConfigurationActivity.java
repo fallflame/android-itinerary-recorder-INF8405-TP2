@@ -56,6 +56,8 @@ public class ItineraryConfigurationActivity extends ActionBarActivity {
         intent.putExtra("interval", interval);
         intent.putExtra("zoomLevel", zoomLevel);
 
+        finish();
+
         startActivity(intent);
 
     }

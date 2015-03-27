@@ -182,13 +182,4 @@ public class ItineraryReviewActivity extends FragmentActivity {
         }
     }
 
-    @Override
-    // need to go back to the menu
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        Intent intent = new Intent(this, HistoriesActivity.class);
-        startActivity(intent);
-
-        return true;
-    }
-
 }

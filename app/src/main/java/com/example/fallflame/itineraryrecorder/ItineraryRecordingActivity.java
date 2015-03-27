@@ -9,7 +9,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
@@ -22,6 +21,7 @@ import android.os.BatteryManager;
 import android.os.CountDownTimer;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -107,7 +107,7 @@ public class ItineraryRecordingActivity extends FragmentActivity {
             // Try to obtain the map from the SupportMapFragment.
             mMap = ((SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map))
                     .getMap();
-            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(0, 0), zoomLevel));
+            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(45.50867, -73.55399), zoomLevel));
             // Check if we were successful in obtaining the map.
             if (mMap != null) {
                 setUpMap();
@@ -214,6 +214,8 @@ public class ItineraryRecordingActivity extends FragmentActivity {
         resetCountDownTimer();
     }
 
+    private BroadcastReceiver wifiResultsReceiver;
+
     private void addWifiInfo(final int markIndex){
 
         final WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
@@ -224,33 +226,38 @@ public class ItineraryRecordingActivity extends FragmentActivity {
         //register to receive the call back when wifi scan results are ready
         IntentFilter i = new IntentFilter();
         i.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
-        registerReceiver(new BroadcastReceiver(){
-            public void onReceive(Context c, Intent i){
-                List<ScanResult> scanResultList = wifiManager.getScanResults(); // Returns a <list> of scanResults
-                if (scanResultList.size() != 0) {
-                    int highestLevelIndex = 0;
-                    int highestLevel = 0;
-                    for (ScanResult scanResult : scanResultList) {
-                        if (scanResult.level > highestLevel) {
-                            highestLevelIndex = scanResultList.indexOf(scanResult);
+
+
+        if (wifiResultsReceiver == null) {
+            wifiResultsReceiver = new BroadcastReceiver() {
+                public void onReceive(Context c, Intent i) {
+                    List<ScanResult> scanResultList = wifiManager.getScanResults(); // Returns a <list> of scanResults
+                    if (scanResultList.size() != 0) {
+                        int highestLevelIndex = 0;
+                        int highestLevel = 0;
+                        for (ScanResult scanResult : scanResultList) {
+                            if (scanResult.level > highestLevel) {
+                                highestLevelIndex = scanResultList.indexOf(scanResult);
+                            }
                         }
+
+                        ScanResult hr = scanResultList.get(highestLevelIndex);
+                        String wifiInfo = "PA_Wifi(" + hr.SSID + ", " + hr.level + "dBm, " + hr.BSSID + ")";
+
+                        itineraryPointMarks.get(markIndex).setWifiInfo(wifiInfo);
+
+                        CharSequence text = "Wifi points found.";
+                        int duration = Toast.LENGTH_LONG;
+                        Toast toast = Toast.makeText(getApplicationContext(), text, duration);
+                        toast.show();
+
                     }
 
-                    ScanResult hr = scanResultList.get(highestLevelIndex);
-                    String wifiInfo = "PA_Wifi(" + hr.SSID + ", " + hr.level + "dBm, " + hr.BSSID +")";
-
-                    itineraryPointMarks.get(markIndex).setWifiInfo(wifiInfo);
-
-                    CharSequence text = "Wifi points found.";
-                    int duration = Toast.LENGTH_LONG;
-                    Toast toast = Toast.makeText(getApplicationContext(), text, duration);
-                    toast.show();
-
+                    unregisterReceiver(wifiResultsReceiver);
                 }
-
-                unregisterReceiver(this);
-            }
-        }, i );
+            };
+        }
+        registerReceiver(wifiResultsReceiver, i );
 
         wifiManager.startScan();
 
@@ -298,6 +305,12 @@ public class ItineraryRecordingActivity extends FragmentActivity {
 
         // Register the listener with the Location Manager to receive location updates
         // GPS provider is for test
+
+        if(!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)){
+            Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+            startActivity(intent);
+        }
+
         String locationProvider = LocationManager.GPS_PROVIDER;
         locationManager.requestLocationUpdates(locationProvider, 0, 0, locationListener);
         locationProvider = LocationManager.NETWORK_PROVIDER;
@@ -424,6 +437,8 @@ public class ItineraryRecordingActivity extends FragmentActivity {
             values.put("itineraryDate", System.currentTimeMillis());
             values.put("itineraryMarks", data);
             id = (int) db.insert("itineraries", null, values);
+
+            finish();
 
             Intent intent = new Intent(this, ItineraryReviewActivity.class);
             intent.putExtra("recordId", id);

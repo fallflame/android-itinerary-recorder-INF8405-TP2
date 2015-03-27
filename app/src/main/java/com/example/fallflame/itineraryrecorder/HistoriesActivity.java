@@ -155,12 +155,4 @@ public class HistoriesActivity extends ActionBarActivity {
         db.close();
     }
 
-    @Override
-    // need to go back to the menu
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        Intent intent = new Intent(this, EntryActivity.class);
-        startActivity(intent);
-
-        return true;
-    }
 }
